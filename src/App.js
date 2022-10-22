@@ -1,67 +1,92 @@
-import { ethers } from "ethers";
 import React, { useEffect, useState } from "react";
-import "./App.css";
-import abi from "./utils/WavePortal.json"
-
-const getEthereumObject = () => window.ethereum;
-
-/*
- * This function returns the first linked account found.
- * If there is no account linked, it will return null.
- */
-const findMetaMaskAccount = async () => {
-  try {
-    const ethereum = getEthereumObject();
-
-    /*
-     * First make sure we have access to the Ethereum object.
-     */
-    if (!ethereum) {
-      console.error("Make sure you have Metamask!");
-      return null;
-    }
-
-    console.log("We have the Ethereum object", ethereum);
-    const accounts = await ethereum.request({ method: "eth_accounts" });
-
-    if (accounts.length !== 0) {
-      const account = accounts[0];
-      console.log("Found an authorized account:", account);
-      return account;
-    } else {
-      console.error("No authorized account found");
-      return null;
-    }
-  } catch (error) {
-    console.error(error);
-    return null;
-  }
-};
+import { ethers } from "ethers";
+import './App.css';
+import wavePortal from './utils/WavePortal.json';
 
 const App = () => {
   const [currentAccount, setCurrentAccount] = useState("");
+  const [allWaves, setAllWaves] = useState([]);
+  const contractAddress = "0x2DC61Fe355a333675C3deaACAC2e0311ACA94B50";
 
-  const contractAddress ="0x7Ff6CC6575914791CeD7E313D2bf708C5F1083c7";
-  const contractABI = abi.abi;
+  const getAllWaves = async () => {
+    try {
+      if (window.ethereum) {
+        const provider = new ethers.providers.Web3Provider();
+        const signer = provider.getSigner();
+        const wavePortalContract = new ethers.Contract(contractAddress, wavePortal.abi, signer);
+
+        const waves = await wavePortalContract.getAllWaves();
+
+        let wavesCleaned = [];
+        waves.forEach(wave => {
+          wavesCleaned.push({
+            address: wave.waver,
+            timestamp: new Date(wave.timestamp * 1000),
+            message: wave.message
+          });
+        });
+
+        setAllWaves(wavesCleaned);
+
+        wavePortalContract.on("NewWave", (from, timestamp, message) => {
+          console.log("NewWave", from, timestamp, message);
+
+          setAllWaves(prevState => [...prevState, {
+            address: from,
+            timestamp: new Date(timestamp * 1000),
+            message: message
+          }]);
+        });
+      } else {
+        console.log("Ethereum object doesn't exist!")
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  }
+
+
+  const checkIfWalletIsConnected = async () => {
+    try {
+      const { ethereum } = window;
+
+      if (!ethereum) {
+        console.log("Make sure you have metamask!");
+        return;
+      } else {
+        console.log("We have the ethereum object", ethereum);
+      }
+
+      const accounts = await ethereum.request({ method: 'eth_accounts' });
+
+      if (accounts.length !== 0) {
+        const account = accounts[0];
+        console.log("Found an authorized account:", account);
+      } else {
+        console.log("No authorized account found")
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  }
 
   const connectWallet = async () => {
     try {
-      const ethereum = getEthereumObject();
+      const { ethereum } = window;
+
       if (!ethereum) {
         alert("Get MetaMask!");
         return;
       }
 
-      const accounts = await ethereum.request({
-        method: "eth_requestAccounts",
-      });
+      const accounts = await ethereum.request({ method: "eth_requestAccounts" });
 
       console.log("Connected", accounts[0]);
       setCurrentAccount(accounts[0]);
     } catch (error) {
-      console.error(error);
+      console.log(error)
     }
-  };
+  }
 
   const wave = async () => {
     try {
@@ -70,7 +95,7 @@ const App = () => {
       if (ethereum) {
         const provider = new ethers.providers.Web3Provider(ethereum);
         const signer = provider.getSigner();
-        const wavePortalContract = new ethers.Contract(contractAddress, contractABI, signer);
+        const wavePortalContract = new ethers.Contract(contractAddress, wavePortal.abi, signer);
 
         let count = await wavePortalContract.getTotalWaves();
         console.log("Retrieved total wave count...", count.toNumber());
@@ -83,53 +108,51 @@ const App = () => {
 
         count = await wavePortalContract.getTotalWaves();
         console.log("Retrieved total wave count...", count.toNumber());
-        
       } else {
         console.log("Ethereum object doesn't exist!");
       }
     } catch (error) {
-      console.log(error);
+      console.log(error)
     }
-}
+  }
 
-  /*
-   * This runs our function when the page loads.
-   * More technically, when the App component "mounts".
-   */
-  useEffect(async () => {
-    const account = await findMetaMaskAccount();
-    if (account !== null) {
-      setCurrentAccount(account);
-    }
-  }, []);
+  useEffect(() => {
+    checkIfWalletIsConnected();
+  }, [])
 
   return (
     <div className="mainContainer">
       <div className="dataContainer">
         <div className="header">
-          Hey there!
+          👋 Hey there!
         </div>
 
         <div className="bio">
         I am <a href="https://danipassos.com">Dani</a>. 
-        Glad you're here! Connect your Ethereum wallet and wave at me!
+        Glad you're here! 
         </div>
 
-        <button className="waveButton" onClick={null}>
+        <button className="waveButton" onClick={wave}>
           Wave at Me
         </button>
 
-        {/*
-         * If there is no currentAccount render this button
-         */}
         {!currentAccount && (
           <button className="waveButton" onClick={connectWallet}>
             Connect Wallet
           </button>
         )}
+
+        {allWaves.map((wave, index) => {
+          return (
+            <div style={{ backgroundColor: "OldLace", marginTop: "16px", padding: "8px" }}>
+              <div>Address: {wave.address}</div>
+              <div>Time: {wave.timestamp.toString()}</div>
+              <div>Message: {wave.message}</div>
+            </div>)
+        })}
       </div>
     </div>
   );
-};
+}
 
-export default App;
+export default App
